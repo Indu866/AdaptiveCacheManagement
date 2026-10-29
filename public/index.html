@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>A-W-TinyLFU Real-Time Distributed Cache Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 24px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid #334155; padding-bottom: 16px; }
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+        .card { background: #1e293b; border-radius: 12px; padding: 16px; border: 1px solid #334155; }
+        .card-title { font-size: 12px; text-transform: uppercase; color: #94a3b8; font-weight: 600; margin-bottom: 8px; }
+        .card-value { font-size: 28px; font-weight: 700; color: #38bdf8; }
+        .chart-container { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; margin-bottom: 24px; }
+        h2 { font-size: 16px; margin-top: 0; margin-bottom: 16px; color: #cbd5e1; }
+        .badge { background: #0284c7; color: white; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1 style="margin:0; font-size: 22px;">A-W-TinyLFU Distributed Cache Cluster</h1>
+            <p style="margin:4px 0 0; color:#94a3b8; font-size:14px;">Real-Time Multi-Policy Performance Benchmark</p>
+        </div>
+        <div><span id="phaseBadge" class="badge">Zipfian Phase</span></div>
+    </div>
+
+    <div class="grid">
+        <div class="card"><div class="card-title">Total Requests</div><div id="totalRequests" class="card-value">0</div></div>
+        <div class="card"><div class="card-title">A-W-TinyLFU Hit Rate</div><div id="adaptiveRate" class="card-value" style="color:#38bdf8;">0.0%</div></div>
+        <div class="card"><div class="card-title">Static W-TinyLFU Hit Rate</div><div id="staticRate" class="card-value" style="color:#4ade80;">0.0%</div></div>
+        <div class="card"><div class="card-title">Standard LRU Hit Rate</div><div id="lruRate" class="card-value" style="color:#f87171;">0.0%</div></div>
+    </div>
+
+    <div class="chart-container">
+        <h2>Comparative Moving Average Hit Rate (%)</h2>
+        <canvas id="hitRateChart" height="90"></canvas>
+    </div>
+
+    <div class="chart-container">
+        <h2>Dynamic Window Capacity Adaptation (W_t)</h2>
+        <canvas id="windowChart" height="60"></canvas>
+    </div>
+
+    <script>
+        const maxPoints = 100;
+        const labels = [];
+        const adaptiveData = [], staticData = [], lruData = [], windowData = [];
+
+        const hitChart = new Chart(document.getElementById('hitRateChart'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'A-W-TinyLFU (Proposed)', data: adaptiveData, borderColor: '#38bdf8', borderWidth: 3, tension: 0.3 },
+                    { label: 'Static W-TinyLFU (1%)', data: staticData, borderColor: '#4ade80', borderWidth: 2, borderDash: [5, 5], tension: 0.3 },
+                    { label: 'Standard LRU', data: lruData, borderColor: '#f87171', borderWidth: 2, borderDash: [2, 2], tension: 0.3 }
+                ]
+            },
+            options: { scales: { y: { min: 0, max: 100, grid: { color: '#334155' } }, x: { grid: { color: '#334155' } } } }
+        });
+
+        const windowChart = new Chart(document.getElementById('windowChart'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{ label: 'Window Capacity Size (W_t)', data: windowData, borderColor: '#fb923c', backgroundColor: 'rgba(251, 146, 60, 0.1)', fill: true, borderWidth: 2 }]
+            },
+            options: { scales: { y: { min: 0, max: 25, grid: { color: '#334155' } }, x: { grid: { color: '#334155' } } } }
+        });
+
+        const eventSource = new EventSource('/metrics-stream');
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            document.getElementById('totalRequests').innerText = data.step;
+            document.getElementById('adaptiveRate').innerText = data.adaptiveHitRate.toFixed(1) + '%';
+            document.getElementById('staticRate').innerText = data.staticHitRate.toFixed(1) + '%';
+            document.getElementById('lruRate').innerText = data.lruHitRate.toFixed(1) + '%';
+            document.getElementById('phaseBadge').innerText = data.phase + ' Phase';
+
+            labels.push(data.step);
+            adaptiveData.push(data.adaptiveHitRate);
+            staticData.push(data.staticHitRate);
+            lruData.push(data.lruHitRate);
+            windowData.push(data.windowCapacity);
+
+            if (labels.length > maxPoints) {
+                labels.shift(); adaptiveData.shift(); staticData.shift(); lruData.shift(); windowData.shift();
+            }
+
+            hitChart.update('none');
+            windowChart.update('none');
+        };
+    </script>
+</body>
+</html>

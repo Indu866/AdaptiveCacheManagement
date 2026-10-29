@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  central-cache:
+    build: .
+    container_name: central-cache
+    command: java src.CentralCacheServer
+    ports:
+      - "9090:9090"
+    networks:
+      - cache-net
+
+  app-service:
+    build: .
+    command: java src.AppService
+    environment:
+      - CACHE_HOST=http://central-cache:9090
+    depends_on:
+      - central-cache
+    networks:
+      - cache-net
+
+  workload-generator:
+    build: .
+    container_name: workload-generator
+    command: java src.WorkloadSimulator
+    environment:
+      - APP_HOST=http://app-service:8081
+      - CACHE_HOST=http://central-cache:9090
+    depends_on:
+      - app-service
+    networks:
+      - cache-net
+
+networks:
+  cache-net:
+    driver: bridge
